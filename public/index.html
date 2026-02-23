@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resume Match Analyzer</title>
+    <style>
+      :root {
+        --bg: #f4f7fb;
+        --card: #ffffff;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --primary: #0f766e;
+        --primary-hover: #0d5f59;
+        --border: #d1d5db;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: Segoe UI, Tahoma, Geneva, Verdana, sans-serif;
+        color: var(--text);
+        background: linear-gradient(140deg, #eaf2ff, #eefcf8);
+      }
+      .container {
+        max-width: 900px;
+        margin: 24px auto;
+        padding: 0 16px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+        padding: 18px;
+      }
+      h1 {
+        margin: 0 0 4px;
+      }
+      p {
+        color: var(--muted);
+        margin-top: 0;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin: 12px 0 8px;
+      }
+      textarea,
+      input[type="file"] {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px;
+        font-size: 14px;
+      }
+      textarea {
+        min-height: 180px;
+        resize: vertical;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 14px;
+      }
+      .btn {
+        margin-top: 12px;
+        border: none;
+        border-radius: 8px;
+        background: var(--primary);
+        color: #fff;
+        padding: 10px 14px;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .btn:hover {
+        background: var(--primary-hover);
+      }
+      .status {
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .result {
+        margin-top: 18px;
+        border-top: 1px solid #e5e7eb;
+        padding-top: 14px;
+      }
+      .pill {
+        display: inline-block;
+        background: #dcfce7;
+        color: #166534;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-weight: 700;
+        margin-bottom: 10px;
+      }
+      ul {
+        margin-top: 6px;
+      }
+      .hidden {
+        display: none;
+      }
+      @media (min-width: 768px) {
+        .row {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="card">
+        <h1>Resume Match Analyzer</h1>
+        <p>Paste resume text or upload a PDF. Then add a job description and analyze.</p>
+
+        <label for="resumeText">Resume Text</label>
+        <textarea id="resumeText" placeholder="Paste your resume text here..."></textarea>
+
+        <label for="resumePdf">Resume PDF (optional)</label>
+        <input id="resumePdf" type="file" accept="application/pdf" />
+        <small id="pdfHint" class="status">Upload a PDF or paste text above.</small>
+
+        <label for="jobDescription">Job Description</label>
+        <textarea id="jobDescription" placeholder="Paste the job description here..."></textarea>
+
+        <button id="analyzeBtn" class="btn">Analyze Resume Match</button>
+        <div id="status" class="status"></div>
+
+        <div id="result" class="result hidden">
+          <div id="matchScore" class="pill"></div>
+
+          <h3>Missing Skills</h3>
+          <ul id="missingSkills"></ul>
+
+          <h3>Strengths</h3>
+          <ul id="strengths"></ul>
+
+          <h3>Suggested Improvements</h3>
+          <ul id="improvements"></ul>
+
+          <h3>Rewritten Bullets</h3>
+          <ul id="rewrittenBullets"></ul>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const resumeTextEl = document.getElementById("resumeText");
+      const resumePdfEl = document.getElementById("resumePdf");
+      const jobDescriptionEl = document.getElementById("jobDescription");
+      const analyzeBtnEl = document.getElementById("analyzeBtn");
+      const statusEl = document.getElementById("status");
+      const pdfHintEl = document.getElementById("pdfHint");
+      const resultEl = document.getElementById("result");
+
+      const matchScoreEl = document.getElementById("matchScore");
+      const missingSkillsEl = document.getElementById("missingSkills");
+      const strengthsEl = document.getElementById("strengths");
+      const improvementsEl = document.getElementById("improvements");
+      const rewrittenBulletsEl = document.getElementById("rewrittenBullets");
+
+      const setStatus = (message, isError = false) => {
+        statusEl.textContent = message;
+        statusEl.style.color = isError ? "#b91c1c" : "#6b7280";
+      };
+
+      const fillList = (element, items) => {
+        element.innerHTML = "";
+        (items || []).forEach((item) => {
+          const li = document.createElement("li");
+          li.textContent = item;
+          element.appendChild(li);
+        });
+      };
+
+      resumePdfEl.addEventListener("change", (event) => {
+        const file = event.target.files && event.target.files[0];
+        if (!file) return;
+        pdfHintEl.textContent = `Selected: ${file.name}`;
+      });
+
+      analyzeBtnEl.addEventListener("click", async () => {
+        const resumeText = resumeTextEl.value.trim();
+        const jobDescription = jobDescriptionEl.value.trim();
+        const pdfFile = resumePdfEl.files && resumePdfEl.files[0];
+
+        if (!jobDescription) {
+          setStatus("Please provide job description.", true);
+          return;
+        }
+
+        if (!resumeText && !pdfFile) {
+          setStatus("Please paste resume text or upload a PDF.", true);
+          return;
+        }
+
+        try {
+          analyzeBtnEl.disabled = true;
+          setStatus("Analyzing...");
+          resultEl.classList.add("hidden");
+
+          const formData = new FormData();
+          formData.append("jobDescription", jobDescription);
+          if (resumeText) formData.append("resumeText", resumeText);
+          if (pdfFile) formData.append("resumePdf", pdfFile);
+
+          const response = await fetch("/analyze", {
+            method: "POST",
+            body: formData,
+          });
+
+          const data = await response.json();
+
+          if (!response.ok || !data.status) {
+            throw new Error(data.message || "Analysis failed");
+          }
+
+          const result = data.data;
+          matchScoreEl.textContent = `Match Score: ${result.match_score}%`;
+          fillList(missingSkillsEl, result.missing_skills);
+          fillList(strengthsEl, result.strengths);
+          fillList(improvementsEl, result.improvements);
+          fillList(rewrittenBulletsEl, result.rewritten_bullets);
+
+          resultEl.classList.remove("hidden");
+          setStatus("Analysis complete.");
+        } catch (error) {
+          setStatus(error.message || "Failed to analyze resume", true);
+        } finally {
+          analyzeBtnEl.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
